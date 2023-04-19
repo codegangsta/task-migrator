@@ -1,3 +1,4 @@
+import * as chrono from 'chrono-node';
 import { App, Editor, MarkdownView, Plugin, PluginSettingTab, Setting, SuggestModal } from 'obsidian';
 
 // Remember to rename these classes and interfaces!
@@ -41,9 +42,66 @@ export default class MyPlugin extends Plugin {
 }
 
 class OptionsModal extends SuggestModal<string> {
+
+	constructor(app: App) {
+		super(app)
+		this.emptyStateText = "No files found"
+	}
+
+	// parses a suggestion using chrono, if there is a hit, add it as a first suggestion
+	// otherwise, return all files in the vault, filtered by the query
 	getSuggestions(query: string): string[] | Promise<string[]> {
 		return new Promise((resolve) => {
-			resolve(["one", "two", "three"])
+			let dateQuery = query
+			if (query.startsWith("tod")) {
+				dateQuery = "today"
+			}
+			if (query.startsWith("tom")) {
+				dateQuery = "tomorrow"
+			}
+			if (query.startsWith("yes")) {
+				dateQuery = "yesterday"
+			}
+			if (query.startsWith("mon")) {
+				dateQuery = "monday"
+			}
+			if (query.startsWith("tue")) {
+				dateQuery = "tuesday"
+			}
+			if (query.startsWith("wed")) {
+				dateQuery = "wednesday"
+			}
+			if (query.startsWith("thu")) {
+				dateQuery = "thursday"
+			}
+			if (query.startsWith("fri")) {
+				dateQuery = "friday"
+			}
+			if (query.startsWith("sat")) {
+				dateQuery = "saturday"
+			}
+			if (query.startsWith("sun")) {
+				dateQuery = "sunday"
+			}
+
+			query = query.toLowerCase()
+			const parsed = chrono.parseDate(dateQuery)
+			const date = parsed ? parsed.toISOString().split('T')[0] : null
+
+			const files = this.app.vault.getMarkdownFiles()
+				.map((file) => file.path)
+				.filter((path) => path.toLowerCase().includes(query) || (date && path.toLowerCase().includes(date)))
+
+			// check if a file with the date already exists in "Daily Logs" folder
+			if (parsed) {
+				const path = "Daily Logs/" + date + ".md"
+				const dailyLogPath = this.app.vault.getAbstractFileByPath(path)
+				if (!dailyLogPath) {
+					files.push("Create new daily note: " + path)
+				}
+			}
+
+			resolve(files)
 		})
 	}
 	renderSuggestion(value: string, el: HTMLElement) {
