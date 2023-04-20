@@ -1,10 +1,16 @@
 import * as chrono from 'chrono-node';
-import { App, Editor, MarkdownView, Plugin, PluginSettingTab, Setting, SuggestModal } from 'obsidian';
+import { App, Editor, getIcon, MarkdownView, Plugin, PluginSettingTab, Setting, SuggestModal } from 'obsidian';
 
 // Remember to rename these classes and interfaces!
 
 interface MyPluginSettings {
 	mySetting: string;
+}
+
+interface MigrationTarget {
+	filePath: string;
+	date?: string;
+	createFile?: boolean;
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
@@ -41,74 +47,102 @@ export default class MyPlugin extends Plugin {
 	}
 }
 
-class OptionsModal extends SuggestModal<string> {
+class OptionsModal extends SuggestModal<MigrationTarget> {
 
 	constructor(app: App) {
 		super(app)
 		this.emptyStateText = "No files found"
+		this.setPlaceholder("Migrate this task to...")
 	}
 
 	// parses a suggestion using chrono, if there is a hit, add it as a first suggestion
 	// otherwise, return all files in the vault, filtered by the query
-	getSuggestions(query: string): string[] | Promise<string[]> {
+	getSuggestions(query: string): MigrationTarget[] | Promise<MigrationTarget[]> {
 		return new Promise((resolve) => {
 			let dateQuery = query
 			if (query.startsWith("tod")) {
-				dateQuery = "today"
+				dateQuery = "Today"
 			}
 			if (query.startsWith("tom")) {
-				dateQuery = "tomorrow"
+				dateQuery = "Tomorrow"
 			}
 			if (query.startsWith("yes")) {
-				dateQuery = "yesterday"
+				dateQuery = "Yesterday"
 			}
 			if (query.startsWith("mon")) {
-				dateQuery = "monday"
+				dateQuery = "Monday"
 			}
 			if (query.startsWith("tue")) {
-				dateQuery = "tuesday"
+				dateQuery = "Tuesday"
 			}
 			if (query.startsWith("wed")) {
-				dateQuery = "wednesday"
+				dateQuery = "Wednesday"
 			}
 			if (query.startsWith("thu")) {
-				dateQuery = "thursday"
+				dateQuery = "Thursday"
 			}
 			if (query.startsWith("fri")) {
-				dateQuery = "friday"
+				dateQuery = "Friday"
 			}
 			if (query.startsWith("sat")) {
-				dateQuery = "saturday"
+				dateQuery = "Saturday"
 			}
 			if (query.startsWith("sun")) {
-				dateQuery = "sunday"
+				dateQuery = "Sunday"
 			}
 
 			query = query.toLowerCase()
 			const parsed = chrono.parseDate(dateQuery)
 			const date = parsed ? parsed.toISOString().split('T')[0] : null
 
-			const files = this.app.vault.getMarkdownFiles()
+			const files: MigrationTarget[] = this.app.vault.getMarkdownFiles()
 				.map((file) => file.path)
-				.filter((path) => path.toLowerCase().includes(query) || (date && path.toLowerCase().includes(date)))
+				.filter((path) => path.toLowerCase().includes(query))
+				.map((path) => ({ filePath: path }))
 
 			// check if a file with the date already exists in "Daily Logs" folder
 			if (parsed) {
 				const path = "Daily Logs/" + date + ".md"
 				const dailyLogPath = this.app.vault.getAbstractFileByPath(path)
 				if (!dailyLogPath) {
-					files.push("Create new daily note: " + path)
+					files.unshift({ filePath: path, date: dateQuery, createFile: true })
+				} else {
+					files.unshift({ filePath: path, date: dateQuery })
 				}
 			}
 
 			resolve(files)
 		})
 	}
-	renderSuggestion(value: string, el: HTMLElement) {
-		el.setText(value)
+	renderSuggestion(value: MigrationTarget, el: HTMLElement) {
+		el.addClass('mod-complex')
+
+		const content = el.createDiv('suggestion-content')
+		content.appendText(value.filePath)
+		el.appendChild(content)
+
+		const aux = el.createDiv('suggestion-aux')
+		el.appendChild(aux)
+
+		if (value.date) {
+			const flair = el.createDiv('suggestion-flair')
+			flair.setText(value.date)
+			aux.appendChild(flair)
+		}
+		if (value.createFile) {
+			const icon = getIcon("calendar-plus")
+			if (icon) {
+				const flair = el.createDiv('suggestion-flair')
+				flair.appendChild(icon)
+				aux.appendChild(flair)
+			}
+		}
+
+
 	}
-	onChooseSuggestion(item: string, evt: MouseEvent | KeyboardEvent) {
-		console.log(item)
+
+	onChooseSuggestion(item: MigrationTarget, evt: MouseEvent | KeyboardEvent) {
+		console.log(item.filePath)
 	}
 }
 
