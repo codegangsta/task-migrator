@@ -1,5 +1,5 @@
 import * as chrono from 'chrono-node';
-import { App, Editor, getIcon, MarkdownView, Plugin, PluginSettingTab, Setting, SuggestModal } from 'obsidian';
+import { App, Editor, getIcon, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, SuggestModal, TFile } from 'obsidian';
 
 // Remember to rename these classes and interfaces!
 
@@ -10,7 +10,7 @@ interface MyPluginSettings {
 interface MigrationTarget {
 	filePath: string;
 	date?: string;
-	createFile?: boolean;
+	file?: TFile
 }
 
 const DEFAULT_SETTINGS: MyPluginSettings = {
@@ -96,19 +96,14 @@ class OptionsModal extends SuggestModal<MigrationTarget> {
 			const date = parsed ? parsed.toISOString().split('T')[0] : null
 
 			const files: MigrationTarget[] = this.app.vault.getMarkdownFiles()
-				.map((file) => file.path)
-				.filter((path) => path.toLowerCase().includes(query))
-				.map((path) => ({ filePath: path }))
+				.filter((file) => file.path.toLowerCase().includes(query))
+				.map((file) => ({ filePath: file.path, file: file }))
 
 			// check if a file with the date already exists in "Daily Logs" folder
 			if (parsed) {
 				const path = "Daily Logs/" + date + ".md"
-				const dailyLogPath = this.app.vault.getAbstractFileByPath(path)
-				if (!dailyLogPath) {
-					files.unshift({ filePath: path, date: dateQuery, createFile: true })
-				} else {
-					files.unshift({ filePath: path, date: dateQuery })
-				}
+				const file = this.app.vault.getMarkdownFiles().find((file) => file.path === path)
+				files.unshift({ filePath: path, date: dateQuery, file: file })
 			}
 
 			resolve(files)
@@ -129,7 +124,7 @@ class OptionsModal extends SuggestModal<MigrationTarget> {
 			flair.setText(value.date)
 			aux.appendChild(flair)
 		}
-		if (value.createFile) {
+		if (!value.file) {
 			const icon = getIcon("calendar-plus")
 			if (icon) {
 				const flair = el.createDiv('suggestion-flair')
@@ -141,8 +136,52 @@ class OptionsModal extends SuggestModal<MigrationTarget> {
 
 	}
 
-	onChooseSuggestion(item: MigrationTarget, evt: MouseEvent | KeyboardEvent) {
-		console.log(item.filePath)
+	async onChooseSuggestion(item: MigrationTarget, evt: MouseEvent | KeyboardEvent) {
+		if (!item.file) {
+			item.file = await this.app.vault.create(item.filePath, "")
+		}
+
+
+		const editor = this.app.workspace.getActiveViewOfType(MarkdownView)?.editor
+		if (!editor) {
+			console.log("No active editor")
+			return
+		}
+
+		const cursor = editor.getCursor()
+		const line = editor.getLine(cursor.line)
+		const taskRegex = /(- \[(.)\] )(.*)/
+		const taskMatch = line.match(taskRegex)
+		if (!taskMatch) {
+			console.log("No task found")
+			return
+		}
+
+		// create a markdown link
+		const link = this.app.fileManager.generateMarkdownLink(item.file, item.filePath)
+		const newLine = line.replace(`- [${taskMatch[2]}] `, `- [>] `) + " " + link
+		editor.setLine(cursor.line, newLine)
+
+
+		// append task to new file
+		await this.app.vault.append(item.file, "\n" + line)
+
+		// read file contents
+		const content = await this.app.vault.read(item.file)
+		// prepend task to new file, but put it after any frontmatter
+		const frontmatter = "---"
+		const frontmatterIndex = content.indexOf(frontmatter)
+		if (frontmatterIndex !== -1) {
+			const frontmatterEnd = content.indexOf("---", frontmatterIndex + frontmatter.length)
+			if (frontmatterEnd !== -1) {
+				const newContent = content.substring(0, frontmatterEnd + frontmatter.length) + "\n\n" + line + "\n" + content.substring(frontmatterEnd + frontmatter.length)
+				await this.app.vault.modify(item.file, newContent)
+			}
+		} else {
+			await this.app.vault.modify(item.file, line + "\n" + content)
+		}
+
+		new Notice("Task migrated to " + item.filePath)
 	}
 }
 
