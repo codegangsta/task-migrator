@@ -23,9 +23,19 @@ export default class TaskMigrator extends Plugin {
 
 		this.addCommand({
 			id: 'migrate-task',
-			name: 'migrate a task to another file',
+			name: 'Migrate a task to another file',
+			icon: 'calendar-plus',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				new OptionsModal(this.app).open()
+				new OptionsModal(this.app, ">").open()
+			}
+		})
+
+		this.addCommand({
+			id: 'scheduel-task',
+			name: 'Schedule a task to another file',
+			icon: 'calendar-plus',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+				new OptionsModal(this.app, "<").open()
 			}
 		})
 
@@ -46,11 +56,18 @@ export default class TaskMigrator extends Plugin {
 }
 
 class OptionsModal extends SuggestModal<MigrationTarget> {
+	type: '>' | '<'
 
-	constructor(app: App) {
+	constructor(app: App, type: '>' | '<') {
 		super(app)
+		this.type = type
 		this.emptyStateText = "No files found"
-		this.setPlaceholder("Migrate this task to...")
+
+		if (type === '>') {
+			this.setPlaceholder("Migrate this task to...")
+		} else if (type === '<') {
+			this.setPlaceholder("Schedule this task to...")
+		}
 	}
 
 	// parses a suggestion using chrono, if there is a hit, add it as a first suggestion
@@ -58,6 +75,7 @@ class OptionsModal extends SuggestModal<MigrationTarget> {
 	getSuggestions(query: string): MigrationTarget[] | Promise<MigrationTarget[]> {
 		const { format, folder, template } = window.app.plugins.getPlugin("periodic-notes")?.settings?.daily || {};
 		return new Promise((resolve) => {
+			query = query.toLowerCase()
 			let dateQuery = query
 			if (query.startsWith("tod")) {
 				dateQuery = "Today"
@@ -180,7 +198,7 @@ class OptionsModal extends SuggestModal<MigrationTarget> {
 
 			// create a markdown link
 			const link = this.app.fileManager.generateMarkdownLink(item.file, item.filePath)
-			const newLine = line.replace(`- [${taskMatch[2]}] `, `- [>] `) + " " + link
+			const newLine = line.replace(`- [${taskMatch[2]}] `, `- [${this.type}] `) + " " + link
 			editor.setLine(lineNumber, newLine)
 			taskContent.push(line)
 
