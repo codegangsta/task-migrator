@@ -148,23 +148,44 @@ class OptionsModal extends SuggestModal<MigrationTarget> {
 			return
 		}
 
-		const cursor = editor.getCursor()
-		const line = editor.getLine(cursor.line)
-		const taskRegex = /(- \[(.)\] )(.*)/
-		const taskMatch = line.match(taskRegex)
-		if (!taskMatch) {
-			console.log("No task found")
-			return
+
+		const lines: number[] = []
+		// loop through all lines in the current selection, if there are no lines then use the current line
+		const selections = editor.listSelections()
+		if (selections.length === 0) {
+			lines.push(editor.getCursor().line)
+		} else {
+			selections.forEach((selection) => {
+				if (selection.head.line < selection.anchor.line) {
+					for (let i = selection.head.line; i <= selection.anchor.line; i++) {
+						lines.push(i)
+					}
+				} else {
+					for (let i = selection.anchor.line; i <= selection.head.line; i++) {
+						lines.push(i)
+					}
+				}
+			})
 		}
 
-		// create a markdown link
-		const link = this.app.fileManager.generateMarkdownLink(item.file, item.filePath)
-		const newLine = line.replace(`- [${taskMatch[2]}] `, `- [>] `) + " " + link
-		editor.setLine(cursor.line, newLine)
+		const taskContent: string[] = []
 
+		lines.forEach(async (lineNumber) => {
+			const line = editor.getLine(lineNumber)
+			const taskRegex = /(- \[(.)\] )(.*)/
+			const taskMatch = line.match(taskRegex)
+			if (!taskMatch) {
+				console.log("No task found")
+				return
+			}
 
-		// append task to new file
-		await this.app.vault.append(item.file, "\n" + line)
+			// create a markdown link
+			const link = this.app.fileManager.generateMarkdownLink(item.file, item.filePath)
+			const newLine = line.replace(`- [${taskMatch[2]}] `, `- [>] `) + " " + link
+			editor.setLine(lineNumber, newLine)
+			taskContent.push(line)
+
+		})
 
 		// read file contents
 		const content = await this.app.vault.read(item.file)
@@ -174,14 +195,15 @@ class OptionsModal extends SuggestModal<MigrationTarget> {
 		if (frontmatterIndex !== -1) {
 			const frontmatterEnd = content.indexOf("---", frontmatterIndex + frontmatter.length)
 			if (frontmatterEnd !== -1) {
-				const newContent = content.substring(0, frontmatterEnd + frontmatter.length) + "\n\n" + line + "\n" + content.substring(frontmatterEnd + frontmatter.length)
+				const newContent = content.substring(0, frontmatterEnd + frontmatter.length) + taskContent.join("\n") + "\n" + content.substring(frontmatterEnd + frontmatter.length)
 				await this.app.vault.modify(item.file, newContent)
 			}
 		} else {
-			await this.app.vault.modify(item.file, line + "\n" + content)
+			await this.app.vault.modify(item.file, taskContent.join("\n") + "\n" + content)
 		}
 
-		new Notice("Task migrated to " + item.filePath)
+		console.log(taskContent)
+		new Notice("Task(s) migrated to " + item.filePath)
 	}
 }
 
