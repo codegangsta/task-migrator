@@ -1,9 +1,7 @@
 import * as chrono from 'chrono-node';
 import { App, Editor, getIcon, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, SuggestModal, TFile } from 'obsidian';
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
+interface TaskMigratorSettings {
 	mySetting: string;
 }
 
@@ -13,12 +11,12 @@ interface MigrationTarget {
 	file?: TFile
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
+const DEFAULT_SETTINGS: TaskMigratorSettings = {
 	mySetting: 'default'
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class TaskMigrator extends Plugin {
+	settings: TaskMigratorSettings;
 
 	async onload() {
 		await this.loadSettings();
@@ -31,7 +29,7 @@ export default class MyPlugin extends Plugin {
 			}
 		})
 
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.addSettingTab(new TaskMigratorSettingTab(this.app, this));
 	}
 
 	onunload() {
@@ -58,6 +56,7 @@ class OptionsModal extends SuggestModal<MigrationTarget> {
 	// parses a suggestion using chrono, if there is a hit, add it as a first suggestion
 	// otherwise, return all files in the vault, filtered by the query
 	getSuggestions(query: string): MigrationTarget[] | Promise<MigrationTarget[]> {
+		const { format, folder, template } = window.app.plugins.getPlugin("periodic-notes")?.settings?.daily || {};
 		return new Promise((resolve) => {
 			let dateQuery = query
 			if (query.startsWith("tod")) {
@@ -101,7 +100,7 @@ class OptionsModal extends SuggestModal<MigrationTarget> {
 
 			// check if a file with the date already exists in "Daily Logs" folder
 			if (parsed) {
-				const path = "Daily Logs/" + date + ".md"
+				const path = folder + "/" + date + ".md"
 				const file = this.app.vault.getMarkdownFiles().find((file) => file.path === path)
 				files.unshift({ filePath: path, date: dateQuery, file: file })
 			}
@@ -207,10 +206,10 @@ class OptionsModal extends SuggestModal<MigrationTarget> {
 	}
 }
 
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+class TaskMigratorSettingTab extends PluginSettingTab {
+	plugin: TaskMigrator;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: TaskMigrator) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
@@ -219,19 +218,5 @@ class SampleSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 
 		containerEl.empty();
-
-		containerEl.createEl('h2', { text: 'Settings for my awesome plugin.' });
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					console.log('Secret: ' + value);
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
 	}
 }
