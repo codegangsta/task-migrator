@@ -212,7 +212,7 @@ class OptionsModal extends SuggestModal<MigrationTarget> {
 		if (frontmatterIndex !== -1) {
 			const frontmatterEnd = content.indexOf("---", frontmatterIndex + frontmatter.length)
 			if (frontmatterEnd !== -1) {
-				const newContent = content.substring(0, frontmatterEnd + frontmatter.length) + taskContent.join("\n") + "\n" + content.substring(frontmatterEnd + frontmatter.length)
+				const newContent = content.substring(0, frontmatterEnd + frontmatter.length) + "\n" + taskContent.join("\n") + "\n" + content.substring(frontmatterEnd + frontmatter.length)
 				await this.app.vault.modify(item.file, newContent)
 			}
 		} else {
